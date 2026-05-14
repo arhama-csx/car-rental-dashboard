@@ -1,0 +1,224 @@
+
+<h2 class="sr-only">Car rental fleet dashboard — live vehicle status, returns, and alerts</h2>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+.dash { padding: 1.25rem 0; }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.25rem; }
+.metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 0.85rem 1rem; }
+.metric-label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+.metric-val { font-size: 26px; font-weight: 500; color: var(--color-text-primary); line-height: 1; }
+.metric-sub { font-size: 12px; color: var(--color-text-tertiary); margin-top: 3px; }
+.section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.section-head h3 { font-size: 14px; font-weight: 500; color: var(--color-text-secondary); letter-spacing: 0.03em; }
+.filters { display: flex; gap: 6px; }
+.pill { font-size: 12px; padding: 3px 10px; border-radius: 20px; border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s; }
+.pill.active { background: var(--color-text-primary); color: var(--color-background-primary); border-color: var(--color-text-primary); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); text-align: left; padding: 6px 8px; border-bottom: 0.5px solid var(--color-border-tertiary); letter-spacing: 0.04em; }
+td { padding: 9px 8px; border-bottom: 0.5px solid var(--color-border-tertiary); color: var(--color-text-primary); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--color-background-secondary); }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
+.b-out { background: #E6F1FB; color: #0C447C; }
+.b-due { background: #FAEEDA; color: #633806; }
+.b-late { background: #FCEBEB; color: #791F1F; }
+.b-avail { background: #EAF3DE; color: #27500A; }
+.b-maint { background: #F1EFE8; color: #444441; }
+.plate { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-secondary); }
+.action-btn { font-size: 12px; padding: 4px 10px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary); cursor: pointer; transition: all 0.15s; }
+.action-btn:hover { background: var(--color-background-secondary); }
+.action-btn.primary { background: var(--color-text-primary); color: var(--color-background-primary); border-color: var(--color-text-primary); }
+.divider { height: 0.5px; background: var(--color-border-tertiary); margin: 1.25rem 0; }
+.alert-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.alert-row:last-child { border-bottom: none; }
+.alert-icon { font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+.alert-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.alert-sub { font-size: 12px; color: var(--color-text-secondary); margin-top: 1px; }
+.search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.search-row input { flex: 1; font-size: 13px; }
+.empty { text-align: center; padding: 2rem; color: var(--color-text-tertiary); font-size: 13px; }
+.return-form { background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; align-items: end; }
+.form-row label { font-size: 12px; color: var(--color-text-secondary); display: block; margin-bottom: 4px; }
+.form-row input, .form-row select { font-size: 13px; width: 100%; }
+</style>
+
+<div class="dash">
+
+<div class="metrics" id="metrics"></div>
+
+<div class="return-form">
+  <div class="section-head" style="margin-bottom:10px"><h3>LOG A RETURN</h3></div>
+  <div class="form-row">
+    <div>
+      <label>Plate / Unit</label>
+      <input type="text" id="ret-plate" placeholder="e.g. LHR-441" />
+    </div>
+    <div>
+      <label>Fuel level</label>
+      <select id="ret-fuel">
+        <option>Full</option><option>3/4</option><option>1/2</option><option>1/4</option><option>Empty</option>
+      </select>
+    </div>
+    <div>
+      <label>Condition</label>
+      <select id="ret-cond">
+        <option>Clean</option><option>Minor marks</option><option>Damage noted</option>
+      </select>
+    </div>
+    <div>
+      <button class="action-btn primary" onclick="logReturn()">Log return</button>
+    </div>
+  </div>
+  <div id="ret-msg" style="font-size:12px; margin-top:8px; color: var(--color-text-secondary);"></div>
+</div>
+
+<div class="section-head">
+  <h3>FLEET STATUS</h3>
+  <div class="filters" id="filters">
+    <button class="pill active" data-f="all" onclick="setFilter(this,'all')">All</button>
+    <button class="pill" data-f="out" onclick="setFilter(this,'out')">Out</button>
+    <button class="pill" data-f="due" onclick="setFilter(this,'due')">Due today</button>
+    <button class="pill" data-f="late" onclick="setFilter(this,'late')">Overdue</button>
+    <button class="pill" data-f="avail" onclick="setFilter(this,'avail')">Available</button>
+  </div>
+</div>
+
+<div class="search-row">
+  <input type="text" id="search" placeholder="Search by plate, model, or customer…" oninput="renderTable()" />
+</div>
+
+<table id="fleet-table">
+  <thead>
+    <tr>
+      <th>Vehicle</th><th>Plate</th><th>Customer</th><th>Out</th><th>Due back</th><th>Status</th><th></th>
+    </tr>
+  </thead>
+  <tbody id="fleet-body"></tbody>
+</table>
+
+<div class="divider"></div>
+
+<div class="section-head"><h3>ALERTS</h3></div>
+<div id="alerts-list"></div>
+
+</div>
+
+<script>
+const today = new Date();
+function dStr(d){ return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function daysDiff(a,b){ return Math.round((b-a)/(1000*60*60*24)); }
+
+let fleet = [
+  {id:1,model:'Toyota Corolla',plate:'LHR-441',customer:'Ahmed Siddiqui',out:addDays(today,-5),due:addDays(today,-1),status:'late',fuel:'Full',cond:'Clean'},
+  {id:2,model:'Honda City',plate:'LHR-882',customer:'Sara Khan',out:addDays(today,-3),due:today,status:'due',fuel:'3/4',cond:'Clean'},
+  {id:3,model:'Suzuki Swift',plate:'ISB-217',customer:'Usman Ali',out:addDays(today,-2),due:addDays(today,2),status:'out',fuel:null,cond:null},
+  {id:4,model:'Hyundai Tucson',plate:'KHI-554',customer:'Nadia Farooq',out:addDays(today,-1),due:addDays(today,-1),status:'late',fuel:null,cond:null},
+  {id:5,model:'Toyota Fortuner',plate:'LHR-009',customer:null,out:null,due:null,status:'avail',fuel:null,cond:null},
+  {id:6,model:'Suzuki Cultus',plate:'LHR-773',customer:null,out:null,due:null,status:'avail',fuel:null,cond:null},
+  {id:7,model:'Honda BR-V',plate:'ISB-340',customer:'Bilal Rehman',out:addDays(today,-7),due:addDays(today,1),status:'out',fuel:null,cond:null},
+  {id:8,model:'Kia Sportage',plate:'LHR-121',customer:null,out:null,due:null,status:'maint',fuel:null,cond:null},
+];
+
+let activeFilter = 'all';
+
+function setFilter(el, f){
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  activeFilter = f;
+  renderTable();
+}
+
+function statusBadge(s, due){
+  if(s==='late') return `<span class="badge b-late"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Overdue</span>`;
+  if(s==='due') return `<span class="badge b-due"><i class="ti ti-clock" aria-hidden="true"></i> Due today</span>`;
+  if(s==='out') return `<span class="badge b-out"><i class="ti ti-car" aria-hidden="true"></i> Out</span>`;
+  if(s==='avail') return `<span class="badge b-avail"><i class="ti ti-check" aria-hidden="true"></i> Available</span>`;
+  if(s==='maint') return `<span class="badge b-maint"><i class="ti ti-tool" aria-hidden="true"></i> Maintenance</span>`;
+  return '';
+}
+
+function renderTable(){
+  const q = document.getElementById('search').value.toLowerCase();
+  const rows = fleet.filter(v=>{
+    const matchF = activeFilter==='all' || v.status===activeFilter;
+    const matchQ = !q || v.plate.toLowerCase().includes(q) || v.model.toLowerCase().includes(q) || (v.customer||'').toLowerCase().includes(q);
+    return matchF && matchQ;
+  });
+  const tbody = document.getElementById('fleet-body');
+  if(!rows.length){ tbody.innerHTML=`<tr><td colspan="7"><div class="empty">No vehicles match.</div></td></tr>`; return; }
+  tbody.innerHTML = rows.map(v=>{
+    const daysLate = v.status==='late' ? daysDiff(v.due, today) : null;
+    const actionBtn = v.status==='out'||v.status==='due'||v.status==='late'
+      ? `<button class="action-btn" onclick="quickReturn(${v.id})">Return</button>`
+      : v.status==='avail' ? `<button class="action-btn" onclick="sendPrompt('I want to rent out vehicle ${v.plate} (${v.model})')">Rent out ↗</button>` : '';
+    return `<tr>
+      <td><span style="font-weight:500">${v.model}</span></td>
+      <td><span class="plate">${v.plate}</span></td>
+      <td>${v.customer||'<span style="color:var(--color-text-tertiary)">—</span>'}</td>
+      <td>${v.out?dStr(v.out):'<span style="color:var(--color-text-tertiary)">—</span>'}</td>
+      <td>${v.due?dStr(v.due)+(daysLate?` <span style="color:#A32D2D;font-size:11px">(+${daysLate}d)</span>`:''): '<span style="color:var(--color-text-tertiary)">—</span>'}</td>
+      <td>${statusBadge(v.status, v.due)}</td>
+      <td>${actionBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderMetrics(){
+  const out = fleet.filter(v=>v.status==='out'||v.status==='due').length;
+  const late = fleet.filter(v=>v.status==='late').length;
+  const avail = fleet.filter(v=>v.status==='avail').length;
+  const util = Math.round((fleet.filter(v=>v.status!=='avail'&&v.status!=='maint').length/fleet.length)*100);
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric"><div class="metric-label">On the road</div><div class="metric-val">${out+late}</div><div class="metric-sub">of ${fleet.length} vehicles</div></div>
+    <div class="metric"><div class="metric-label">Overdue returns</div><div class="metric-val" style="color:#A32D2D">${late}</div><div class="metric-sub">${late?'Needs follow-up':'All on time'}</div></div>
+    <div class="metric"><div class="metric-label">Available now</div><div class="metric-val" style="color:#3B6D11">${avail}</div><div class="metric-sub">Ready to rent</div></div>
+    <div class="metric"><div class="metric-label">Utilisation</div><div class="metric-val">${util}%</div><div class="metric-sub">Fleet occupancy</div></div>
+  `;
+}
+
+function renderAlerts(){
+  const lates = fleet.filter(v=>v.status==='late');
+  const dues = fleet.filter(v=>v.status==='due');
+  const maint = fleet.filter(v=>v.status==='maint');
+  let html = '';
+  lates.forEach(v=>{
+    const d = daysDiff(v.due, today);
+    html+=`<div class="alert-row"><i class="ti ti-alert-circle alert-icon" style="color:#A32D2D" aria-hidden="true"></i><div><div class="alert-title">${v.plate} — ${v.model} is ${d} day${d>1?'s':''} overdue</div><div class="alert-sub">Rented to ${v.customer} · was due ${dStr(v.due)}</div></div></div>`;
+  });
+  dues.forEach(v=>{
+    html+=`<div class="alert-row"><i class="ti ti-clock alert-icon" style="color:#854F0B" aria-hidden="true"></i><div><div class="alert-title">${v.plate} — ${v.model} due back today</div><div class="alert-sub">Rented to ${v.customer}</div></div></div>`;
+  });
+  maint.forEach(v=>{
+    html+=`<div class="alert-row"><i class="ti ti-tool alert-icon" style="color:#5F5E5A" aria-hidden="true"></i><div><div class="alert-title">${v.plate} — ${v.model} in maintenance</div><div class="alert-sub">Not available for rental</div></div></div>`;
+  });
+  if(!html) html=`<div class="alert-row"><i class="ti ti-circle-check alert-icon" style="color:#3B6D11" aria-hidden="true"></i><div><div class="alert-title">No active alerts</div><div class="alert-sub">Fleet is running smoothly</div></div></div>`;
+  document.getElementById('alerts-list').innerHTML = html;
+}
+
+function quickReturn(id){
+  const v = fleet.find(x=>x.id===id);
+  document.getElementById('ret-plate').value = v.plate;
+  document.getElementById('ret-msg').textContent = '';
+  document.getElementById('ret-plate').focus();
+}
+
+function logReturn(){
+  const plate = document.getElementById('ret-plate').value.trim().toUpperCase();
+  const fuel = document.getElementById('ret-fuel').value;
+  const cond = document.getElementById('ret-cond').value;
+  const msg = document.getElementById('ret-msg');
+  if(!plate){ msg.textContent='Enter a plate number.'; return; }
+  const v = fleet.find(x=>x.plate===plate.replace(/\s/g,'-'));
+  if(!v){ msg.textContent=`No vehicle found with plate "${plate}".`; return; }
+  if(v.status==='avail'){ msg.textContent=`${plate} is already available.`; return; }
+  v.status='avail'; v.fuel=fuel; v.cond=cond; v.customer=null; v.out=null; v.due=null;
+  document.getElementById('ret-plate').value='';
+  msg.innerHTML=`<span style="color:var(--color-text-success)"><i class="ti ti-check"></i> ${plate} returned — ${fuel} fuel, ${cond.toLowerCase()}. Marked available.</span>`;
+  renderMetrics(); renderTable(); renderAlerts();
+}
+
+renderMetrics(); renderTable(); renderAlerts();
+</script>
